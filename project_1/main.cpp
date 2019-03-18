@@ -22,8 +22,17 @@ class Graph {
 
 public:
 	//Graph constructor
-	Graph() {
+	Graph(int routers, int connections) {
+		n_routers = routers;
+		n_connections = connections;
 
+		adjacency_list.resize(n_routers, std::list<int>());
+		d = new std::vector<int>(getRouters(), -1);
+		low = new std::vector<int>(getRouters(), -1);
+		importantRouters = new std::vector<bool>(getRouters(), false);
+		importantRouter = 0;
+		inStack = new std::vector<bool>(getRouters(), false);
+		forests = new std::vector<std::vector<int>>();
 	}
 
 	~Graph() {
@@ -67,13 +76,7 @@ public:
 	}
 
 	void init() {
-		adjacency_list.resize(n_routers, std::list<int>());
-		d = new std::vector<int>(getRouters(), -1);
-		low = new std::vector<int>(getRouters(), -1);
-		importantRouters = new std::vector<bool>(getRouters(), false);
-		importantRouter = 0;
-		inStack = new std::vector<bool>(getRouters(), false);
-		forests = new std::vector<std::vector<int>>();
+		
 	}
 
 	std::list<int> getEdgeListOfNode(int i) {
@@ -178,14 +181,12 @@ public:
 
 // Main
 int main() {
-	Graph* g = new Graph();
+	
  
 	int n_routers, n_connections;
 	scanf("%d", &n_routers);
 	scanf("%d", &n_connections);
-	g->addRouters(n_routers);
-	g->addConnections(n_connections);
-	g->init();
+	Graph* g = new Graph(n_routers, n_connections);
 	for(int i = 0; i < n_connections; i++) {
 		int n1, n2;
 		scanf("%d %d", &n1, &n2);
