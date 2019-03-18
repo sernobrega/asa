@@ -28,6 +28,7 @@ public:
 
 	~Graph() {
 		delete d;
+		delete &adjacency_list;
 		delete low;
 		delete inStack;
 		delete importantRouters;
@@ -169,6 +170,8 @@ public:
 			max = std::max(tmp, max);
 		}
 
+		delete traverse;
+
 		return max;
 	}
 };
@@ -212,6 +215,7 @@ int main() {
 
 	printf("%d\n", g->fundamentalDFS());
 
+	delete &forests;
 	delete g;
 	return 0;
 }
