@@ -26,6 +26,14 @@ public:
 
 	}
 
+	~Graph() {
+		delete d;
+		delete low;
+		delete inStack;
+		delete importantRouters;
+		delete forests;
+	}
+
 	int getNumberImportant() {
 		return importantRouter;
 	}
@@ -204,5 +212,6 @@ int main() {
 
 	printf("%d\n", g->fundamentalDFS());
 
+	delete g;
 	return 0;
 }
