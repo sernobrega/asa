@@ -27,6 +27,11 @@ public:
 	}
 
 	~Graph() {
+		delete inStack;
+		delete d;
+		delete forests;
+		delete importantRouters;
+		delete low;
 	}
 
 	int getNumberImportant() {
@@ -209,7 +214,9 @@ int main() {
 
 	printf("%d\n", g->fundamentalDFS());
 
-	Graph * g = new Graph();
+
+	delete g;
+
 
 	return 0;
 }
