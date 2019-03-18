@@ -91,6 +91,8 @@ public:
 				tarjanVisit(-1, u, &counter, stk);
 			}
 		}
+
+		delete stk;
 	}
 
 	void tarjanVisit(int p, int u, int * counter, std::list<int> * stk) {
@@ -102,7 +104,7 @@ public:
 		stk->push_back(u);
 		inStack->at(u) = true;
 
-		for(int &adj: getEdgeListOfNode(u)) {
+		for(int adj: getEdgeListOfNode(u)) {
 			if(d->at(adj) == -1) {
 				childcount++;
 				tarjanVisit(u, adj, counter, stk);
@@ -128,6 +130,7 @@ public:
 			} while(tmp != u);
 
 			addNewScc(*new_scc);
+			delete new_scc;
 		}
 	}
 
@@ -181,7 +184,7 @@ int main() {
 
 	g->tarjan();
 
-	// Number of forests
+	//Number of forests
 	std::vector<std::vector<int>> forests = g->getForests();
 	printf("%lu\n", forests.size());
 	
@@ -196,7 +199,7 @@ int main() {
 		i == 0 ? printf("\n") : printf(" ");
 	}
 
-	// Get number of routers that break the network
+	//Get number of routers that break the network
 	printf("%d\n", g->getNumberImportant());
 
 	printf("%d\n", g->fundamentalDFS());
