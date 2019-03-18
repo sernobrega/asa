@@ -102,7 +102,7 @@ public:
 		stk->push_back(u);
 		inStack->at(u) = true;
 
-		for(int adj: getEdgeListOfNode(u)) {
+		for(int &adj: getEdgeListOfNode(u)) {
 			if(d->at(adj) == -1) {
 				childcount++;
 				tarjanVisit(u, adj, counter, stk);
