@@ -1,27 +1,38 @@
-#include <cstdlib>
+/*
+ * 1st project of Analysis and Synthesis of Algorithms 2018/2019
+ * Instituto Superior Tecnico - ULisboa
+ *
+ * Project realised by Sergio Nobrega 86806
+ * More about this project can be found at Github @sernobrega
+ * 
+ * Main goals of this project were to find SCCs and cut vertices in a graph. Algorithms used were Trajan and DFS.
+ *
+ */
+
 #include <cstdio>
 #include <list>
 #include <vector>
-#include <stack>
 #include <algorithm>
 
 /*
-FILLME
-*/
+ * Class Graph - contains all secondary data structures for Trajan and DFS, stores the SCCs and cut vertices of the graph.
+ */
 class Graph {
 	int n_routers = 0;
 	int n_connections = 0;
+	int n_cut = 0;
 
 	std::vector<std::list<int>> adjacency_list;
 	std::vector<int> * d;
 	std::vector<int> * low;
-	std::vector<bool> * inStack;
-	std::vector<bool> * importantRouters;
-	int importantRouter;
-	std::vector<std::vector<int>> * forests;
+	std::vector<bool> * visited;
+	std::vector<bool> * cutRouters;
+	std::vector<std::vector<int>> * v_sccs;
 
 public:
-	//Graph constructor
+	/*
+	 * Graph() - constructor, initialises all the vectors
+	 */
 	Graph(int routers, int connections) {
 		n_routers = routers;
 		n_connections = connections;
@@ -29,138 +40,140 @@ public:
 		adjacency_list.resize(n_routers, std::list<int>());
 		d = new std::vector<int>(getRouters(), -1);
 		low = new std::vector<int>(getRouters(), -1);
-		importantRouters = new std::vector<bool>(getRouters(), false);
-		importantRouter = 0;
-		inStack = new std::vector<bool>(getRouters(), false);
-		forests = new std::vector<std::vector<int>>();
+		cutRouters = new std::vector<bool>(getRouters(), false);
+		visited = new std::vector<bool>(getRouters(), false);
+		v_sccs = new std::vector<std::vector<int>>();
 	}
 
 	~Graph() {
-		delete inStack;
+		delete visited;
 		delete d;
-		delete forests;
-		delete importantRouters;
+		delete v_sccs;
+		delete cutRouters;
 		delete low;
 	}
 
-	int getNumberImportant() {
-		return importantRouter;
-	}
-
-	void addNewScc(std::vector<int> scc) {
-		forests->push_back(scc);
-	}
-
-	std::vector<std::vector<int>> getForests() {
-		return *forests;
-	}
-
-	void addRouters(int r) {
-		n_routers = r;
-	}
-
-	void addConnections(int c) {
-		n_connections = c;
-	}
-
+	/*
+	 * getRouters() get the number of vertices
+	 */
 	int getRouters() {
 		return n_routers;
 	}
 
+	/*
+	 * getNumberConnections() get the number of connections
+	 */
 	int getNumberConnections() {
 		return n_connections;
 	}
 
+	/*
+	 * getAdjacencyList() get adjacency list
+	 */
 	std::vector<std::list<int>> getAdjacencyList() {
 		return adjacency_list;
 	}
 
-	void init() {
-		
+	/*
+	 * getNumberCut() get number of cut vertices
+	 */
+	int getNumberCut() {
+		return n_cut;
 	}
 
+	/*
+	 * getSCCs() gets SCCs of graph
+	 */
+	std::vector<std::vector<int>> getSCCs() {
+		return *v_sccs;
+	}
+
+	/*
+	 * getEdgeListOfNode(int) get edges of a vertice
+	 */
 	std::list<int> getEdgeListOfNode(int i) {
 		return adjacency_list[i];
 	}
 
+	/*
+	 * addEdge(int, int) add an edge to the graph
+	 */
 	void addEdge(int i, int j){
 		adjacency_list[i-1].push_back(j-1);
 		adjacency_list[j-1].push_back(i-1);
 	}
- 
-	void removeEdge(int i, int j) {
-		adjacency_list[i-1].remove(j-1);
-		adjacency_list[j-1].remove(i-1);
-	}
 
+	/*
+	 * tarjan() executes Tarjan algorithm
+	 */
 	void tarjan() {
 		int counter = 0;
 		std::list<int> * stk = new std::list<int>();
 
-		for(int u = getRouters() - 1; u > -1; u--) {
+		for(int u = 0; u < getRouters(); u++) {
 			if(d->at(u) == -1) {
-				tarjanVisit(-1, u, &counter, stk);
+				tarjanVisit(u, true, &counter, stk);
 			}
 		}
 
 		delete stk;
 	}
 
-	void tarjanVisit(int p, int u, int * counter, std::list<int> * stk) {
+	/*
+	 * tarjanVisit(int, int, int *, list<int> *) auxiliary method, recursive
+	 * Calculates the cut vertices and creates the SCCs
+	 */
+	void tarjanVisit(int u, bool p, int * counter, std::list<int> * stk) {
 		int childcount = 0;
 		d->at(u) = *counter;
 		low->at(u) = *counter;
 		(*counter)++;
 
 		stk->push_back(u);
-		inStack->at(u) = true;
+		visited->at(u) = true;
 
-		for(int adj: getEdgeListOfNode(u)) {
+		for(int &adj: getEdgeListOfNode(u)) {
 			if(d->at(adj) == -1) {
 				childcount++;
-				tarjanVisit(u, adj, counter, stk);
+				tarjanVisit(adj, false, counter, stk);
 				low->at(u) = std::min(low->at(u), low->at(adj));
 
-				if(((low->at(adj) >= d->at(u) && p != -1) || ((p == -1) && (childcount > 1))) && importantRouters->at(u)!=true) {
-					importantRouters->at(u) = true;
-					importantRouter++;
+				//Conditions to be a cut vertex:
+				//1. Root of a tree and has more than 1 child, or
+				//2. The son vertex has a higher low[] than the father
+				if(((low->at(adj) >= d->at(u) && !p) || (p && (childcount > 1))) && cutRouters->at(u)!=true) {
+					cutRouters->at(u) = true;
+					n_cut++;
 				}	
 			}
-			else if(inStack->at(adj) == true) {
+			else if(visited->at(adj) == true) {
 				low->at(u) = std::min(low->at(u), d->at(adj));
 			}
 		}	
 
 		if(d->at(u) == low->at(u)) {
-			std::vector<int> * new_scc = new std::vector<int>();
+			std::vector<int> new_scc;
 			int tmp = -1;
 			do {
 				tmp = stk->back();
 				stk->pop_back();
-				new_scc->push_back(tmp);
+				new_scc.push_back(tmp);
 			} while(tmp != u);
 
-			addNewScc(*new_scc);
-			delete new_scc;
+			v_sccs->push_back(new_scc);
 		}
 	}
 
-	void fundamentalVisit(int u, std::vector<bool> * traverse, int * tmp) {
-		traverse->at(u) = true;
-
-		for(int j : getEdgeListOfNode(u))
-			 if(!traverse->at(j)) {
-			 	(*tmp)++;
-				fundamentalVisit(j, traverse, tmp);
-			}
-	}
-
+	/*
+	 * fundamentalDFS() - calculates the number of nodes of the biggest SCC when removing all the cut vertices
+	 */
 	int fundamentalDFS() {
 		int max = 0;
 		std::vector<bool> * traverse = new std::vector<bool>(getRouters(), false);
 		
+		//Marking cut vertices as already visited so that they will be ignored by the algorithm
 		for(int i = 0; i < (int) traverse->size(); i++)
-			if(importantRouters->at(i) == true)
+			if(cutRouters->at(i) == true)
 				traverse->at(i) = true;
 
 		for(int u = 0; u < getRouters(); u++) {
@@ -176,14 +189,31 @@ public:
 
 		return max;
 	}
+
+	/*
+	 * fundamentalVisit(int, std::vector<bool>*, int *) - auxiliary method for fundamentalDFS
+	 */
+	void fundamentalVisit(int u, std::vector<bool> * traverse, int * tmp) {
+		traverse->at(u) = true;
+
+		for(int j : getEdgeListOfNode(u))
+			 if(!traverse->at(j)) {
+			 	(*tmp)++;
+				fundamentalVisit(j, traverse, tmp);
+			}
+	}
 };
 
 
-// Main
+/*
+ * Main
+ */
 int main() {
-	
- 
 	int n_routers, n_connections;
+
+	/*
+	 * Read input and create Graph g
+	 */
 	scanf("%d", &n_routers);
 	scanf("%d", &n_connections);
 	Graph* g = new Graph(n_routers, n_connections);
@@ -193,26 +223,47 @@ int main() {
 		g->addEdge(n1, n2);
 	}
 
+	/*
+	 * Execute Tarjan
+	 */
 	g->tarjan();
 
-	//Number of forests
-	std::vector<std::vector<int>> forests = g->getForests();
-	printf("%lu\n", forests.size());
+	/*
+	 * Get the SCCs vector and print the number of SCCs
+	 */
+	std::vector<std::vector<int>> v_sccs = g->getSCCs();
+	printf("%lu\n", v_sccs.size());
 	
-	//IDs of forests
-	for(int i = (int) forests.size() - 1; i > -1; i--) {
+	/*
+	 * Get maximum of each SCC and put in an auxiliary vector
+	 */
+	std::vector<int> scc_ids;
+	for(int i = 0; i < (int) v_sccs.size(); i++) {
 		int m = 0;
-		for(int j: forests.at(i)) {
+		for(int j: v_sccs.at(i)) {
 			if(j > m)
 				m = j;
 		}
-		printf("%d", m+1);
-		i == 0 ? printf("\n") : printf(" ");
+		scc_ids.push_back(m+1);
 	}
 
-	//Get number of routers that break the network
-	printf("%d\n", g->getNumberImportant());
+	//Sort vector
+	std::sort(scc_ids.begin(), scc_ids.end());
 
+	//Print SCCs IDs
+	for(int x: scc_ids) {
+		printf("%d", x);
+		x != scc_ids.back() ? printf(" ") : printf("\n");
+	}
+
+	/*
+	 * Print number of cut vertices
+	 */
+	printf("%d\n", g->getNumberCut());
+
+	/*
+	 * Execute DFS and print number of nodes of biggest SCC when excluding all SCCs
+	 */
 	printf("%d\n", g->fundamentalDFS());
 
 
