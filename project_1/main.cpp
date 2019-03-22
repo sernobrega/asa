@@ -110,7 +110,7 @@ public:
 		int counter = 0;
 		std::list<int> * stk = new std::list<int>();
 
-		for(int u = 0; u < getRouters(); u++) {
+		for(int u = getRouters() - 1; u >= 0; u--) {
 			if(d->at(u) == -1) {
 				tarjanVisit(u, true, &counter, stk);
 			}
@@ -132,7 +132,9 @@ public:
 		stk->push_back(u);
 		visited->at(u) = true;
 
-		for(int &adj: getEdgeListOfNode(u)) {
+		std::list<int> edge_list = getEdgeListOfNode(u);
+		for(std::list<int>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+			int adj = *it;
 			if(d->at(adj) == -1) {
 				childcount++;
 				tarjanVisit(adj, false, counter, stk);
@@ -151,16 +153,17 @@ public:
 			}
 		}	
 
-		if(d->at(u) == low->at(u)) {
-			std::vector<int> new_scc;
+		if(d->at(u) == low->at(u) && stk->size() > 0) {
+			std::vector<int> * new_scc = new std::vector<int>();
 			int tmp = -1;
 			do {
 				tmp = stk->back();
 				stk->pop_back();
-				new_scc.push_back(tmp);
-			} while(tmp != u);
+				new_scc->push_back(tmp);
+			} while(tmp != u && stk->size() > 0);
 
-			v_sccs->push_back(new_scc);
+			v_sccs->push_back(*new_scc);
+			delete new_scc;
 		}
 	}
 
@@ -237,23 +240,14 @@ int main() {
 	/*
 	 * Get maximum of each SCC and put in an auxiliary vector
 	 */
-	std::vector<int> scc_ids;
-	for(int i = 0; i < (int) v_sccs.size(); i++) {
+	for(int i = (int) v_sccs.size() - 1; i > -1; i--) {
 		int m = 0;
 		for(int j: v_sccs.at(i)) {
 			if(j > m)
 				m = j;
 		}
-		scc_ids.push_back(m+1);
-	}
-
-	//Sort vector
-	std::sort(scc_ids.begin(), scc_ids.end());
-
-	//Print SCCs IDs
-	for(int x: scc_ids) {
-		printf("%d", x);
-		x != scc_ids.back() ? printf(" ") : printf("\n");
+		printf("%d", m+1);
+		i == 0 ? printf("\n") : printf(" ");
 	}
 
 	/*
