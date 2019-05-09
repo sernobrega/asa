@@ -26,7 +26,6 @@ using namespace std;
 struct Edge {
 	int origin;
 	int destiny;
-	int capacity;
 	int flow;
 };
 
@@ -39,13 +38,12 @@ class Graph {
 	int n_supplier = 0;
 	int n_provider = 0;
 
-	deque<int> * nodes_aug = new deque<int>();
-
-	list<Edge> * conn_aug;
-
-	std::vector<std::list<Edge>> adjacency_list;
-	vector<vector<int>> graph_rep;
+	std::vector<std::list<Edge*>> adjacency_list;
+	
 	vector<int> * nodes_cap;
+
+	deque<int> * nodes_aug = new deque<int>();
+	deque<int> * conn_aug = new deque<int>();
 
 public:
 	/*
@@ -56,12 +54,7 @@ public:
 		n_supplier = supplier;
 		n_connections = connections;
 
-		/* index 0 - source
-		 * index 1 - sink
-		 * other index - providers (2 to n_provider + 2) and suppliers (2 + n_providers + 1 to n_supplier + n_provider + 2)
-		 */
-		graph_rep = vector<vector<int>>(supplier + provider + 2, vector<int>(supplier + provider + 2, 0));
-		adjacency_list.resize(provider + supplier + 2, std::list<Edge>());
+		adjacency_list.resize(provider + supplier + 2, std::list<Edge*>());
 		nodes_cap = new vector<int>(supplier + provider, -1);
 	}
 
@@ -76,61 +69,50 @@ public:
 		return n_provider + n_supplier + 2;
 	}
 
-	/*
-	 * getNumberProviders() get the number of providers
-	 */
-	int getNumberProviders() {
-		return n_provider;
-	}
-
-	/*
-	 * getNumberSuppliers() get the number of suppliers
-	 */
-	int getNumberSuppliers() {
-		return n_supplier;
-	}
-
-	/*
-	 * getNumberConnections() get the number of connections
-	 */
-	int getNumberConnections() {
-		return n_connections;
+	list<Edge*> getEdgeList(int origin) {
+		return adjacency_list[origin];
 	}
 
 	/*
 	 * setEdge(int, int, int, int) add an edge to the graph
 	 */
-	Edge getEdge(int origin, int destiny){
-		list<Edge> edge_list =adjacency_list[origin];
+	Edge * getEdgePtr(int origin, int destiny){
+		list<Edge*> edge_list = adjacency_list[origin];
 
-		for(list<Edge>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
-			Edge e = * it;
-			if(e.destiny == destiny)
+		for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+			Edge * e = * it;
+			if(e->destiny == destiny)
 				return e;
 		}
+		printf("Hey");
+		return NULL;
 	}
 
 	/*
 	 * setEdge(int, int, int, int) add an edge to the graph
 	 */
-	void setEdge(int origin, int destiny, int flow, int cap){
-		graph_rep[origin][destiny] = cap;
-		Edge e = {origin, destiny, flow, cap};
+	void setEdge(int origin, int destiny, int flow){
+		Edge * e = new Edge();
+		e->origin = origin;
+		e->destiny = destiny;
+		e->flow = flow;
 		adjacency_list[origin].push_back(e);
 	}
-	
+
 	/*
-	 * setEdge(int, int) add an edge to the graph FIXME
+	 * setEdge(int, int, int, int) add an edge to the graph
 	 */
-	void setEdge(int origin, int destiny, int cap){
-		graph_rep[origin][destiny] = cap;
+	void addFlow(int origin, int destiny, int flow){
+		Edge * e = getEdgePtr(origin, destiny);
+		e->flow = e->flow + flow;
 	}
 
 	/*
 	 *	getCapacityValue(int, int) get capacity value of a given connection
 	 */
 	int getCapacityValue(int origin, int destiny) {
-		return graph_rep[origin][destiny];
+		Edge * e = getEdgePtr(origin, destiny);
+		return e->flow;
 	}
 
 	void setNodeCapacity(int i, int cap) {
@@ -139,18 +121,6 @@ public:
 
 	int getNodeCapacity(int i) {
 		return nodes_cap->at(i);
-	}
-
-	void addNodeAug(int i) {
-		nodes_aug->push_back(i);
-	}
-
-	void listNodeAug() {
-		// for(int i = 0; i < nodes_aug->size(); i++) {
-		// 	printf("%d ", nodes_aug->front());
-		// 	nodes_aug->pop_front();
-		// }
-		// printf("\n");
 	}
 };
 
@@ -169,8 +139,8 @@ Graph * readInput() {
 		int cap;
 		scanf("%d", &cap);
 		g->setNodeCapacity(i, cap);
-		g->setEdge(0, i + 2, INT_MAX);
-		g->setEdge(0, i + 2, 0, INT_MAX);
+		g->setEdge(0, i + 2, cap);
+		g->setEdge(i + 2, 0, cap);
 	}
 
 	for(int i = 0; i < n_supplier; i++) {
@@ -182,8 +152,8 @@ Graph * readInput() {
 	for(int i = 0; i < n_connections; i++) {
 		int orig, dest, cap;
 		scanf("%d %d %d", &orig, &dest, &cap);
-		g->setEdge(orig, dest, cap);
-		g->setEdge(orig, dest, 0, cap);
+		g->setEdge(dest, orig, cap);
+		g->setEdge(orig, dest, 0);
 	}
 
 	return g;
@@ -193,61 +163,71 @@ Graph * readInput() {
 class EdmondsKarp {
 public:
 	static bool bfs(Graph * g, int s, int t, vector<int> * parent) {
+
 		vector<bool> * visited = new vector<bool>(g->getNumberNodes(), false);
 
 		deque<int> * q = new deque<int>();
 		q->push_back(s);
 		visited->at(s) = true;
 		parent->at(s) = -1;
-
+		
 		while(!q->empty()) {
 			int u = q->front();
 			q->pop_front();
 
-			for(int v = 1; v < g->getNumberNodes(); v++) {
-				if(((v > 1 && g->getNodeCapacity(v - 2) > 0) || v < 2) && g->getCapacityValue(u, v) > 0 && !visited->at(v)) {
+			list<Edge*> edge_list = g->getEdgeList(u);
+
+			for(std::list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+				Edge * e = *it;
+				int v = e->destiny;
+				if(((v > 1 && g->getNodeCapacity(v - 2) > 0) || v < 2) && e->flow > 0 && !visited->at(v)) {
 					q->push_back(v);
 					parent->at(v) = u;
 					visited->at(v) = true;
+					
 				}
+
 			}
 		}
 
-		return visited->at(1) == true;
+		return visited->at(t) == true;
 	}
 
 	static int fordfulkerson(Graph * g) {
 		int max_capacity = 0;
 
 		int u, v;
+		int s = 1, t = 0;
 		
-		vector<int> * parent = new vector<int>(g->getNumberNodes() + 1, 0);
+		vector<int> * parent = new vector<int>(g->getNumberNodes(), 0);
 
-		while(bfs(g, 0, 1, parent)) {
+		while(bfs(g, s, t, parent)) {
 
 			int path_capacity = INT_MAX;
 			/*
 			 *  Calculate bottleneck
 			 */
-			for(v = 1; v != 0; v = parent->at(v)) {
+			for(v = t; v != s; v = parent->at(v)) {
 				u = parent->at(v);
-				if(u > 0) {
+				
+				if(u > 1) {
 					path_capacity = min(path_capacity, g->getNodeCapacity(u - 2));
 				}
 				path_capacity = min(path_capacity, g->getCapacityValue(u, v));
 			}
+			printf("Capacity: %d\n", path_capacity);
 
 			/*
 			 *  Build residual graph
 			 */
-			for(v = 1; v != 0; v = parent->at(v)) { 
+			for(v = t; v != s; v = parent->at(v)) { 
 				u = parent->at(v);
-
-				if(u > 0) 
+				printf("%d\n", u);
+				if(u > 1) 
 				 	g->setNodeCapacity(u - 2, g->getNodeCapacity(u - 2) - path_capacity);
 				
-				g->setEdge(u, v, g->getCapacityValue(u, v) - path_capacity);
-				g->setEdge(v, u, g->getCapacityValue(v, u) + path_capacity);
+				g->addFlow(u, v, - path_capacity);
+				g->addFlow(v, u, path_capacity);
 			}
 
 			// 	for(int x = 0; x < g->getNumberNodes(); x++) {
@@ -256,6 +236,7 @@ public:
 			// 	}
 			// 	printf("\n");
 			// }
+			printf("Gets to the end...");
 			max_capacity += path_capacity;
 		}
 		return max_capacity;
@@ -272,6 +253,10 @@ void transposeGraph(Graph * g) {
 	// }
 }
 
+void dfsGraph(Graph * g) {
+
+}
+
 /*
  * Main
  */
@@ -281,15 +266,6 @@ int main() {
 	 */
 	Graph * g = readInput();
 	printf("%d\n", EdmondsKarp::fordfulkerson(g));
-	g->listNodeAug();
-
-
-	// for(int x = 0; x < g->getNumberNodes(); x++) {
-	// 		for(int y = 0; y < g->getNumberNodes(); y++) {
-	// 			printf("%d ", g->getCapacityValue(x, y));
-	// 		}
-	// 		printf("\n");
-	// 	}
 
 	delete g;
 
