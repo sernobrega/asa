@@ -20,60 +20,71 @@
 #include <climits>
 #include <queue>
 #include <list>
+#include <unordered_set>
 
 using namespace std; 
 
+/*
+ *  Edge - edge of a graph
+ */
 struct Edge {
-	int origin;
 	int destiny;
-	int flow;
+	int origin;
+	int capacity;
+	int orig_capacity;
 };
 
 /*
  * Class Graph - contains all secondary data structures and operations. Represents the graph.
  */
 class Graph {
-	int n_connections = 0;
-	int n_supplier = 0;
-	int n_provider = 0;
+private:
+	int nonodes = 0;
+	int provider = 0;
 
-	std::vector<std::list<Edge*>> adjacency_list;
-	
+	vector<list<Edge*>> residual_graph;
 	vector<int> * nodes_cap;
+	vector<int> * nodes_cut;
 
 public:
 	/*
 	 * Graph() - constructor, initialises all the vectors
 	 */
 	Graph(int provider, int supplier, int connections) {
-		n_provider = provider;
-		n_supplier = supplier;
-		n_connections = connections;
+		nonodes = provider + supplier + 2;
+		provider = provider;
 
-		adjacency_list.resize(provider + supplier + 2, std::list<Edge*>());
-		nodes_cap = new vector<int>(supplier + provider, -1);
+		residual_graph.resize(nonodes, list<Edge*>());
+		nodes_cap = new vector<int>(nonodes);
 	}
 
 	~Graph() {
 		delete nodes_cap;
+		delete nodes_cut;
 	}
 
-	/*
-	 * getNumberNodes() get the number of nodes
-	 */
 	int getNumberNodes() {
-		return n_provider + n_supplier + 2;
+		return nonodes;
+	}
+
+	int getNumberProvider() {
+		return provider;
+	}
+
+	vector<int> * getNodesCut() {
+		return nodes_cut;
+	}
+
+	void setNodesCut(vector<int> * nodes) {
+		nodes_cut = nodes;
 	}
 
 	list<Edge*> getEdgeList(int origin) {
-		return adjacency_list[origin];
+		return residual_graph[origin];
 	}
 
-	/*
-	 * setEdge(int, int, int, int) add an edge to the graph
-	 */
 	Edge * getEdgePtr(int origin, int destiny){
-		list<Edge*> edge_list = adjacency_list[origin];
+		list<Edge*> edge_list = residual_graph[origin];
 
 		for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
 			Edge * e = * it;
@@ -83,236 +94,263 @@ public:
 		return NULL;
 	}
 
-	/*
-	 * setEdge(int, int, int, int) add an edge to the graph
-	 */
-	void setEdge(int origin, int destiny, int flow){
+	void setEdge(int origin, int destiny, int capacity){
 		Edge * e = new Edge();
 		e->origin = origin;
 		e->destiny = destiny;
-		e->flow = flow;
-		adjacency_list[origin].push_back(e);
+		e->capacity = capacity;
+		e->orig_capacity = capacity;
+		residual_graph[origin].push_back(e);
+		
+
+		Edge * r = new Edge();
+		r->origin = destiny;
+		r->destiny = origin;
+		r->capacity = 0;
+		r->orig_capacity = 0;
+		residual_graph[destiny].push_back(r);
 	}
 
-	/*
-	 * setEdge(int, int, int, int) add an edge to the graph
-	 */
-	void addFlow(int origin, int destiny, int flow){
+	void addFlow(int origin, int destiny, int capacity){
 		Edge * e = getEdgePtr(origin, destiny);
-		e->flow = e->flow + flow;
+		e->capacity = e->capacity + capacity;
 	}
 
-	/*
-	 *	getCapacityValue(int, int) get capacity value of a given connection
-	 */
 	int getCapacityValue(int origin, int destiny) {
 		Edge * e = getEdgePtr(origin, destiny);
-		return e->flow;
+		return e->capacity;
 	}
 
 	void setNodeCapacity(int i, int cap) {
 		nodes_cap->at(i) = cap;
 	}
 
+
 	int getNodeCapacity(int i) {
 		return nodes_cap->at(i);
 	}
 
-	int getProviderNo() {
-		return n_provider;
-	}
+	static Graph * createGraphFromStdin();
+
+	/* Maximum flow  */
+	bool bfs(int s, int t, vector<int> * parent);
+	void fordFulkerson(int s, int t);
+
+	/* Find limiting */
+	void findFaultsGraph();
+	void findEdgesCut();
+	void dfs_EdgesCut(int v, vector<bool> * visited);
+	void dfs_visit(int v, vector<bool> * visited);
+
 };
 
 /*
- *  readInput() - reads input and creates graph g
+ *  createGraphFromStdin() - reads input and creates graph g
  */
-Graph * readInput() {
+Graph * Graph::createGraphFromStdin() {
 	int n_provider, n_supplier, n_connections;
+	int offset = 2;
 	scanf("%d", &n_provider);
 	scanf("%d", &n_supplier);
 	scanf("%d", &n_connections);
 
 	Graph* g = new Graph(n_provider, n_supplier, n_connections);
 
-	for(int i = 0; i < n_provider; i++) {
+	g->setNodeCapacity(0, INT_MAX);
+	g->setNodeCapacity(1, INT_MAX);
+
+	for(int i = offset; i < n_provider + offset; i++) {
 		int cap;
 		scanf("%d", &cap);
 		g->setNodeCapacity(i, cap);
-		g->setEdge(0, i + 2, cap);
-		g->setEdge(i + 2, 0, cap);
+		g->setEdge(i, 0, cap);
 	}
 
-	for(int i = 0; i < n_supplier; i++) {
+	for(int i = n_provider + offset; i < n_supplier + n_provider + offset; i++) {
 		int cap;
 		scanf("%d", &cap);
-		g->setNodeCapacity(i + n_provider, cap);
+		g->setNodeCapacity(i, cap);
 	}
 
 	for(int i = 0; i < n_connections; i++) {
 		int orig, dest, cap;
 		scanf("%d %d %d", &orig, &dest, &cap);
 		g->setEdge(dest, orig, cap);
-		g->setEdge(orig, dest, 0);
 	}
 
 	return g;
 }
 
+bool Graph::bfs(int s, int t, vector<int> * parent) {
 
-class EdmondsKarp {
-public:
-	static bool bfs(Graph * g, int s, int t, vector<int> * parent) {
+	vector<bool> * visited = new vector<bool>(getNumberNodes(), false);
 
-		vector<bool> * visited = new vector<bool>(g->getNumberNodes(), false);
+	deque<int> * q = new deque<int>();
+	q->push_back(s);
+	visited->at(s) = true;
+	parent->at(s) = -1;
+	
+	while(!q->empty()) {
+		int u = q->front();
+		q->pop_front();
 
-		deque<int> * q = new deque<int>();
-		q->push_back(s);
-		visited->at(s) = true;
-		parent->at(s) = -1;
-		
-		while(!q->empty()) {
-			int u = q->front();
-			q->pop_front();
+		list<Edge*> edge_list = getEdgeList(u);
 
-			list<Edge*> edge_list = g->getEdgeList(u);
-
-			for(std::list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
-				Edge * e = *it;
-				int v = e->destiny;
-				if(((v > 1 && g->getNodeCapacity(v - 2) > 0) || v < 2) && e->flow > 0 && !visited->at(v)) {
-					q->push_back(v);
-					parent->at(v) = u;
-					visited->at(v) = true;
-					
-				}
-
+		for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+			Edge * e = *it;
+			int v = e->destiny;
+			if(getNodeCapacity(v) > 0 && e->capacity > 0 && !visited->at(v)) {
+				q->push_back(v);
+				parent->at(v) = u;
+				visited->at(v) = true;
 			}
 		}
-
-		return visited->at(t) == true;
 	}
 
-	static int fordfulkerson(Graph * g) {
-		int max_capacity = 0;
+	return visited->at(t);
+}
 
+void Graph::fordFulkerson(int s, int t) {
+	int max_capacity = 0;
+	
+
+	vector<int> * parent = new vector<int>(getNumberNodes(), 0);
+
+	while(bfs(s, t, parent)) {
 		int u, v;
-		int s = 1, t = 0;
-		
-		vector<int> * parent = new vector<int>(g->getNumberNodes(), 0);
+		int path_capacity = INT_MAX;
 
-		while(bfs(g, s, t, parent)) {
+		for(v = t; v != s; v = parent->at(v)) {
+			u = parent->at(v);
 
-			int path_capacity = INT_MAX;
+			path_capacity = min(path_capacity, getNodeCapacity(u));
+			path_capacity = min(path_capacity, getCapacityValue(u, v));
+		}
 
-			for(v = t; v != s; v = parent->at(v)) {
-				u = parent->at(v);
-				
-				if(u > 1) {
-					path_capacity = min(path_capacity, g->getNodeCapacity(u - 2));
+		/*
+		 *  Build residual graph
+		 */
+		for(v = t; v != s; v = parent->at(v)) { 
+			u = parent->at(v);
+
+			setNodeCapacity(u, getNodeCapacity(u) - path_capacity);
+			addFlow(u, v, -path_capacity);
+			addFlow(v, u, path_capacity);
+		}
+
+		max_capacity += path_capacity;
+	}
+
+	printf("%d\n", max_capacity);
+}
+
+void Graph::findFaultsGraph() {
+	vector<bool> * visited = new vector<bool>(getNumberNodes(), false);
+	unordered_set<int> * nodes_cut_tmp = new unordered_set<int>();
+
+	dfs_visit(1, visited);
+
+	for(int i = 2; i < getNumberNodes(); i++) {
+		if(visited->at(i)) {
+			list<Edge*> edge_list = getEdgeList(i);
+			for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+				Edge * e = *it;
+				int u = e->destiny;
+				if(u != 0 && !visited->at(u) &&  getNodeCapacity(u) == 0 && getNodeCapacity(i) == 0 && e->orig_capacity > e->capacity) {
+					nodes_cut_tmp->insert(i);
 				}
-				path_capacity = min(path_capacity, g->getCapacityValue(u, v));
 			}
+		}
+	}
 
-			/*
-			 *  Build residual graph
-			 */
-			for(v = t; v != s; v = parent->at(v)) { 
-				u = parent->at(v);
-				if(u > 1) 
-				 	g->setNodeCapacity(u - 2, g->getNodeCapacity(u - 2) - path_capacity);
-				
-				g->addFlow(u, v, - path_capacity);
-				g->addFlow(v, u, path_capacity);
+	vector<int> * ordered_nodes = new vector<int>(nodes_cut_tmp->begin(), nodes_cut_tmp->end());
+	sort(ordered_nodes->begin(), ordered_nodes->end());
 
+	/*
+	 * Print nodes that need to be augmented
+	 */
+	for(unsigned i = 0; i< ordered_nodes->size(); i++) {
+        printf("%d", ordered_nodes->at(i));
+        if(i != ordered_nodes->size() - 1)printf(" ");
+    }
+    printf("\n");
+
+    setNodesCut(ordered_nodes);
+
+	delete visited;
+	delete nodes_cut_tmp;
+}
+
+void Graph::dfs_visit(int v, vector<bool> * visited) {
+    visited->at(v) = true; 
+
+  	list<Edge*> edge_list = getEdgeList(v);
+  	for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+  		Edge * e = *it;
+  		int u = e->destiny;
+
+        if (u > 0 && getNodeCapacity(v) != 0 && !visited->at(u) && e->capacity > 0) {
+            dfs_visit(u, visited);
+        }
+    }
+}
+
+void Graph::findEdgesCut() {
+	vector<bool> * visited = new vector<bool>(getNumberNodes(), false);
+	unordered_set<Edge*> * edges_cut = new unordered_set<Edge*>();
+
+	dfs_EdgesCut(1, visited);
+
+	for(int i = 1; i < getNumberNodes(); i++) {
+		if(visited->at(i)) {
+
+			list<Edge*> edge_list = getEdgeList(i);
+			for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+				Edge * e = *it;
+				int u = e->destiny;
+				Edge * r = getEdgePtr(i, u);
+				if(u != 0 && !visited->at(u) && e->orig_capacity > 0) {
+					vector<int> * nodes_cut = getNodesCut();
+					if (!(find(nodes_cut->begin(), nodes_cut->end(), i) != nodes_cut->end())) {
+						edges_cut->insert(r);
+					}
+
+				}
 			}
-
-			max_capacity += path_capacity;
 		}
-		return max_capacity;
-	}
-};
-
-class DFS {
-public:
-
-
-	static void oi(Graph * g) {
-		for(int v = 0; v < g->getNumberNodes(); v++) {
-			list<Edge*> ed = g->getEdgeList(v);
-		  	for(list<Edge*>::iterator it = ed.begin(); it != ed.end(); ++it) {
-		  		Edge * e = *it;
-		  		int u = e->destiny;
-				if(v > g->getProviderNo() + 1 && g->getNodeCapacity(v - 2) == 0 && g->getEdgePtr(v, u)->flow > 0) {
-		  				printf("%d\n", v);	
-		  		}
-		  	}
-		}
-
-		
-
-	}
-
-	static void findFaultsGraph(Graph * g) {
-
-		for(int i = 2; i < g->getProviderNo() + 2; i++) {
-			vector<bool> * visited = new vector<bool>(g->getNumberNodes(), false);
-			deque<int> * path = new deque<int>();
-
-			//printf("New DFS is about to start\n");
-
-			dfs_visit(g, 1, i, visited, path);
-
-			while(!path->empty()) {
-				printf("%d ", path->front());
-				path->pop_front();
-			}
-			printf("\n");
-
-			// for(int x = 0; x < g->getNumberNodes(); x++) {
-			// 	if(visited->at(x) == true)
-			// 	{
-			// 		//printf("%d\n", x);
-			// 	}
-			// }
-
-			delete path;
-			delete visited;
-		}
-		
-
 		
 	}
 
-
-	static void dfs_visit(Graph * g, int v, int t, vector<bool> * visited, deque<int> * path) {
-	    visited->at(v) = true;
-	    path->push_back(v);
-
-	  	list<Edge*> edge_list = g->getEdgeList(v);
-	  	for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
-	  		Edge * e = *it;
-	  		int u = e->destiny;
-	  		if(!visited->at(u) && e->flow > 0 && e->destiny != 0 && e->origin != 0) {
-
-
-	  			//printf("%d %d %d\n", e->origin, e->destiny, e->flow);
-	  			dfs_visit(g, u, t, visited, path); 
-	  		}
-
-	  // 		//IDEA: Get a DFS path and if it finds, run this for each of the vertices
-	  // 		if(v > g->getProviderNo() + 1 && g->getNodeCapacity(v - 2) == 0 && g->getEdgePtr(v, u)->flow > 0) {
-			// 	printf("%d\n", v);	
-			// }
+	vector<Edge*> * ordered_edges = new vector<Edge*>(edges_cut->begin(), edges_cut->end());
+	sort(ordered_edges->begin(), ordered_edges->end(), 
+		[](const Edge * item1, const Edge * item2) {
+			return item1->destiny < item2->destiny || (item1->destiny == item2->destiny && item1->origin < item2->origin );
 		}
+	);
 
-		
+	for(unsigned i = 0; i< ordered_edges->size(); i++) {
+		Edge * e = ordered_edges->at(i);
+		printf("%d %d\n", e->destiny, e->origin);
+    }
 
-		if(visited->at(t) != true) {
+    delete visited;
+    delete edges_cut;
+    delete ordered_edges;
+}
 
-			path->pop_back();
-		}
-	}
-};
+void Graph::dfs_EdgesCut(int v, vector<bool> * visited) {
+	visited->at(v) = true; 
+
+  	list<Edge*> edge_list = getEdgeList(v);
+  	for(list<Edge*>::iterator it = edge_list.begin(); it != edge_list.end(); ++it) {
+  		Edge * e = * it;
+  		int u = e->destiny;
+        if (u > 0 && !visited->at(u) && e->capacity > 0) {
+            dfs_EdgesCut(u, visited);
+        }
+    }
+}
+
 
 /*
  * Main
@@ -321,10 +359,10 @@ int main() {
 	/*
 	 * Read input and create Graph g
 	 */
-	Graph * g = readInput();
-	printf("%d\n", EdmondsKarp::fordfulkerson(g));
-	//DFS::oi(g);
-	DFS::findFaultsGraph(g);
+	Graph * g = Graph::createGraphFromStdin();
+	g->fordFulkerson(1, 0);
+	g->findFaultsGraph();
+	g->findEdgesCut();
 
 	delete g;
 
